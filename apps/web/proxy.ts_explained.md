@@ -1,14 +1,14 @@
 # proxy.ts — interview-ready documentation
 
-> Source file: `apps/web/proxy.ts` (52 lines)
+> Source file: `apps/web/proxy.ts` (46 lines)
 
 ---
 
 ## 1. 30-second elevator pitch
 
-In Next.js 16, there's a special file called `proxy.ts` (previously `middleware.ts` in older versions) that runs *before* any page renders. Think of it as a security guard at the entrance to a building. Most visitors can walk right in — but if you're heading to a restricted floor (like `/upload`, `/billing`, or `/admin`), the guard checks your badge first. No badge? You get redirected to the sign-in desk. And if you're heading to the admin floor specifically, the guard also checks that your badge says "admin" — otherwise you're redirected to the regular dashboard, not an error page.
+In Next.js 16, there's a special file called `proxy.ts` (previously `middleware.ts` in older versions) that runs *before* any page renders. Think of it as a security guard at the entrance to a building. Most visitors can walk right in — but if you're heading to a restricted floor (like `/upload`, `/billing`, or `/admin`), the guard checks your badge first. No badge? You get redirected to the sign-in desk.
 
-**How to say it in an interview:** "This is the Next.js 16 edge proxy — it intercepts requests to protected routes, validates the JWT from the cookie, and redirects unauthenticated users to login with a redirect parameter. For admin routes specifically, it also checks the `isAdmin` claim in the JWT payload and redirects non-admins to dashboard. Non-protected routes pass through untouched, which is why the dashboard stays public."
+**How to say it in an interview:** "This is the Next.js 16 edge proxy — it intercepts requests to protected routes, validates the JWT from the cookie, and redirects unauthenticated users to login with a redirect parameter. Non-protected routes pass through untouched, which is why the dashboard stays public."
 
 ---
 
@@ -30,13 +30,13 @@ In Next.js 16, there's a special file called `proxy.ts` (previously `middleware.
 
 **Over alternative:** Raw `process.env.JWT_SECRET` would work but gives you `string | undefined`, leading to subtle bugs. The config module guarantees the type and existence.
 
-### Decision 3: Fail hard in production, fail soft in development
+### Decision 3: Graceful degradation when secret is unavailable
 
-**What's happening:** `getJwtSecret()` returns `null` if the secret isn't set. In development, the proxy skips JWT verification — you might not have all env vars configured, and you still want the app to run. But in production, skipping verification would be an auth bypass. So if the secret is missing and `NODE_ENV === 'production'`, the proxy returns a 500 error instead of silently waving everyone through.
+**What's happening:** `getJwtSecret()` returns `null` if the secret isn't set, and the proxy skips JWT verification in that case. This might seem unsafe, but it's deliberate for local development — you might not have all env vars configured, and you still want the app to run. In production, the Zod config validation ensures the secret exists before the app starts.
 
-**How to say it in an interview:** "The proxy uses environment-aware failure modes. In dev, a missing JWT secret skips verification for convenience. In production, it returns 500 — because silently skipping JWT verification in production is an auth bypass, not a convenience."
+**How to say it in an interview:** "The null-check on the JWT secret provides graceful degradation during development while production relies on the startup config validation to guarantee it exists. It's defense in depth — two layers of checking."
 
-**Over alternative:** Always throwing would crash the proxy on every request during development. Always skipping would be a security hole in production. The environment check threads the needle.
+**Over alternative:** Throwing an error when the secret is missing would crash the proxy on every request during development, making it painful to work on non-auth features.
 
 ---
 
@@ -44,22 +44,17 @@ In Next.js 16, there's a special file called `proxy.ts` (previously `middleware.
 
 ### Route protection list (line 5)
 
-`PROTECTED_ROUTES` is a simple array of path prefixes. Only `/upload`, `/billing`, `/admin`, and `/settings` are protected. Everything else — including `/dashboard` — passes through. This matches the architecture decision that the dashboard is public (demo mode with seed data for unauthenticated users).
+`PROTECTED_ROUTES` is a simple array of path prefixes. Only `/upload`, `/billing`, and `/admin` are protected. Everything else — including `/dashboard` — passes through. This matches the architecture decision that the dashboard is public (demo mode with seed data for unauthenticated users).
 
 ### Secret accessor (lines 7-10)
 
 `getJwtSecret()` wraps the config access and encoding in one place. Returns `null` if the secret isn't available, or a `Uint8Array` (what the jose library expects). The `TextEncoder` converts the string secret into bytes — jose uses the Web Crypto API which works with byte arrays, not strings.
 
-### Admin route helper (lines 11-13)
+### The proxy function (lines 12-41)
 
-`isAdminRoute()` is a tiny helper that checks if a path is `/admin` or starts with `/admin/`. Extracted as a named function because the same check would otherwise appear inline in the proxy logic, and because naming it makes the intent obvious in the `if` statement where it's used.
-
-### The proxy function (lines 15-47)
-
-The core logic is a three-step check:
+The core logic is a two-step check:
 1. **Is this route protected?** — Checks both exact matches (`/upload`) and prefix matches (`/upload/something`) using `.some()` with a startsWith check.
 2. **Does the user have a valid token?** — Reads the `access_token` cookie, verifies it with jose. No cookie or bad token → redirect to `/login?redirect=/original-path`.
-3. **Is this an admin route and is the user actually an admin?** — After successful JWT verification, the proxy reads `payload.isAdmin` from the decoded token. Non-admins hitting `/admin/*` get redirected to `/dashboard`.
 
 The redirect parameter (`loginUrl.searchParams.set('redirect', pathname)`) preserves where the user was trying to go, so after login they land on the right page instead of always going to `/dashboard`.
 
@@ -73,11 +68,11 @@ The `config.matcher` tells Next.js which routes this proxy should even run on. T
 
 **Time complexity:** O(n) where n is the number of protected routes (currently 3). The `.some()` loop is trivially fast. JWT verification is the real cost — one cryptographic operation per protected route request.
 
-**Authentication vs authorization split:** The proxy handles two levels of checking. For most protected routes, it's binary: authenticated or not. But for `/admin` routes specifically, it reads the `isAdmin` claim from the verified JWT payload and redirects non-admins to `/dashboard`. This is defense in depth — the API layer enforces admin access independently, but the proxy prevents non-admins from seeing even the page shell. Non-admins get a redirect, not a 403 — they're not doing anything wrong, they just don't belong there.
+**The token-only check:** The proxy validates that the JWT is well-formed and not expired, but it doesn't check roles or org membership. That's intentional — role-based access control happens in the API layer, not the proxy. The proxy's job is binary: authenticated or not.
 
 **Cookie vs header:** The token is read from a cookie, not an Authorization header. This is the BFF (Backend-For-Frontend) pattern — cookies are automatically sent by the browser, so the frontend never handles tokens directly. Reduces XSS risk since JavaScript can't access httpOnly cookies.
 
-**How to say it in an interview:** "The proxy handles authentication (are you logged in?) for all protected routes, plus a lightweight authorization check (are you admin?) for admin routes. Fine-grained RBAC is still enforced at the API layer — the proxy just prevents non-admins from loading the admin UI shell. It's defense in depth."
+**How to say it in an interview:** "The proxy handles authentication (are you logged in?) but not authorization (do you have permission?). RBAC is enforced at the API layer. This separation keeps the proxy simple and fast while allowing fine-grained permissions on individual API endpoints."
 
 ---
 
