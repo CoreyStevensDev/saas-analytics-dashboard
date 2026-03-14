@@ -18,10 +18,6 @@ The AiSummaryCard is a React client component that renders AI-generated business
 
 **How to say it in an interview:** "We frame timeout as intentional curation rather than failure. The user sees their partial summary with a message that positions the truncation positively. It's a UX decision — the same technical event (timeout) gets very different emotional treatment depending on how you present it."
 
-**Derived state over synchronized state.** The `retryPending` flag is computed as `status === 'connecting' && text === ''` — a pure derivation from the stream hook's state. An earlier version used `useState` + three `useEffect` blocks to synchronize `retryPending` with `status` and `datasetId` changes. React 19's `react-hooks/set-state-in-effect` rule flagged all three effects. The fix wasn't to suppress the rule — it was to realize that `retryPending` was never independent state. It's a function of what's already known.
-
-**How to say it in an interview:** "I replaced three useEffects with a single derived value. If the component is connecting and has no text yet, a retry is pending. That's a boolean expression, not a piece of state. React 19's lint rule caught the unnecessary synchronization — the fix was to stop treating a derived value as independent state."
-
 **Conditional retry with max cap.** The retry button only shows when `retryable && !maxRetriesReached`. After 3 retries, it's replaced by "Please try again later." — the user knows the system tried but needs time. This prevents infinite retry loops while keeping the UI honest about what's happening.
 
 **Subscription tier as a rendering concern, not a storage concern.** The `tier` prop (from the RSC's server-side fetch) controls what the user sees, not what the database stores. The AI summary cache always stores the full content. For free-tier users, `truncateAtWordBoundary` slices the cached text at 150 words client-side, then `FreePreviewOverlay` renders the preview with a gradient blur and upgrade CTA. Pro users and anonymous visitors see the full text. This separation means upgrading from free to pro is instant — no re-generation needed, just a different rendering path.
@@ -76,11 +72,9 @@ Splits on double newlines to create paragraphs. `filter(Boolean)` removes emptie
 
 **Streaming and Done (180-201).** Same container, different details. Streaming gets cursor + `aria-busy={true}`. Done gets `PostCompletionFooter` + `aria-busy={false}`. The `transition-opacity duration-150` smooths the transition.
 
-### Hook and derived state (lines 152-163)
+### Analytics effects (82-91)
 
-The hook returns `{ status, text, metadata: streamMetadata, error, code, retryable, maxRetriesReached, retry }`. The metadata convergence — `streamMetadata ?? cachedMetadata ?? null` — merges SSE stream and RSC cache paths. A `useEffect` lifts metadata up to DashboardShell via `onMetadataReady`.
-
-`retryPending` is derived, not stored: `const retryPending = status === 'connecting' && text === ''`. This replaced three `useEffect` blocks that synchronized a `useState` boolean with `status` and `datasetId` changes — React 19 flagged them as cascading renders.
+Two `useEffect` hooks: one marks completion (gates future analytics), the other resets the flag when `datasetId` changes.
 
 ## 4. Complexity and Trade-offs
 
@@ -105,10 +99,6 @@ The hook returns `{ status, text, metadata: streamMetadata, error, code, retryab
 **`motion-reduce:` Tailwind prefix.** Maps to `@media (prefers-reduced-motion: reduce)`. The cursor still renders but the animation stops. One line of CSS, big accessibility impact.
 
 **Error code lookup table.** The `ERROR_MESSAGES` record is a simple pattern for decoupling error codes from display text. The server sends machine-readable codes, the client translates. If you need localization later, you swap the record with an i18n lookup.
-
-**Derived state over effect synchronization.** Instead of `useState` + `useEffect` to track a boolean that's fully determined by existing state, compute it inline: `const retryPending = status === 'connecting' && text === ''`. No effect, no stale closure, no cascading render. React 19 explicitly flags the `useState` + `useEffect` pattern — the derived value is the idiomatic alternative.
-
-**Interview-ready:** "If a value can be computed from existing state, it shouldn't be state. Derived values update automatically when their source state changes — no synchronization effects needed, no bugs from forgetting to reset them."
 
 ## 6. Interview Questions
 
@@ -168,25 +158,3 @@ AiSummaryCard gained four new props: `cachedMetadata`, `onToggleTransparency`, `
 **Metadata convergence.** `const metadata = streamMetadata ?? cachedMetadata ?? null` merges two paths. Stream metadata comes from `useAiStream`'s state (when the SSE `done` event arrives with metadata). Cached metadata comes from the RSC page.tsx fetch (for anonymous users). A `useEffect` calls `onMetadataReady` whenever metadata changes, lifting it up to DashboardShell.
 
 **PostCompletionFooter got props.** Previously a zero-prop component. Now accepts `onToggleTransparency` and `transparencyOpen`. The "How I reached this conclusion" button was `disabled` — now it's active with `aria-expanded`, a rotating chevron, and `onClick` wired to the parent's toggle handler. Appears in both `done` and `timeout` states (metadata is available in timeout because the curation pipeline completes before streaming). Hidden in `free_preview` (PostCompletionFooter doesn't render there).
-
----
-
-## Story 4.1 Addendum: Share Insight & Stream Completion
-
-### What Changed
-
-AiSummaryCard gained share-related props and a stream completion callback to support the "Share as Image" feature.
-
-**Share props threaded through PostCompletionFooter (lines 22-26, 89-96, 98-148).** Four new props: `onShare`, `onShareDownload`, `onShareCopy`, and `shareState`. These are callbacks and status from `useShareInsight` in DashboardShell, passed through AiSummaryCard into `PostCompletionFooter`, which renders the `ShareMenu` component. The footer conditionally renders — if all three share callbacks exist, it mounts `ShareMenu`; otherwise, a disabled placeholder "Share" button. This means the share feature degrades gracefully if the parent doesn't provide the callbacks.
-
-**`onStreamComplete` callback (lines 21, 204-206, 214-216).** DashboardShell needs to know when the AI summary finishes (done or timeout) to show the mobile ShareFab. Two `useEffect` blocks fire `onStreamComplete`: one for the stream path (`status === 'done' || status === 'timeout'`), one for the cached path (`hasCached`). This follows the same lift-state-up pattern as `onMetadataReady` — the card reports completion, the shell decides what to do with it.
-
-**PostCompletionFooter share integration (lines 128-145).** The footer now has a conditional: if all share callbacks are provided, render `ShareMenu` with the status and callbacks. Otherwise, render a disabled "Share" button as a placeholder. The `ShareMenu` sits in a `ml-auto` div to push it to the right edge of the footer.
-
-### Interview-Relevant Patterns
-
-**Callback-based state lifting.** `onStreamComplete` is the third callback AiSummaryCard fires upward (after `onMetadataReady` and the implicit state from `useAiStream`). The pattern is consistent: the card knows when something happened, the shell decides what to do about it. The card doesn't know about ShareFab, the shell doesn't know about stream status internals.
-
-**How to say it in an interview:** "AiSummaryCard reports events upward via callbacks — metadata ready, stream complete — without knowing what the parent does with them. DashboardShell uses `onStreamComplete` to gate the mobile share FAB's visibility. The card and the FAB are decoupled through the shell."
-
-**Conditional feature rendering.** The `onShare && onShareDownload && onShareCopy` guard in PostCompletionFooter means the share feature is opt-in. If a consumer of AiSummaryCard doesn't pass share callbacks, the footer still renders but with a disabled placeholder. This is useful for testing (render the card without the share hook wired up) and for future contexts where sharing might not make sense (e.g., an embedded widget).
