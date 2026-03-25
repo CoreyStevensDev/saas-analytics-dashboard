@@ -1,4 +1,4 @@
-# generated: 2026-02-24
+# generated: 2026-03-21
 # project: SaaS Analytics Dashboard
 # project_key: NOKEY
 # tracking_system: file-system
@@ -33,7 +33,7 @@
 # - SM typically creates next story after previous one is 'done' to incorporate learnings
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
-generated: 2026-02-24
+generated: 2026-03-21
 project: SaaS Analytics Dashboard
 project_key: NOKEY
 tracking_system: file-system
@@ -63,21 +63,21 @@ development_status:
   epic-2-retrospective: done
 
   # ── Epic 3: AI-Powered Business Insights ──
-  epic-3: in-progress
+  epic-3: done
   3-1-curation-pipeline-statistical-computation-scoring: done
   3-2-curation-pipeline-prompt-assembly-llm-integration: done
   3-3-sse-streaming-delivery-ai-summary-card: done
   3-4-ai-summary-timeout-error-handling: done
   3-5-free-preview-with-upgrade-cta: done
   3-6-transparency-panel-mobile-first-layout: done
-  epic-3-retrospective: optional
+  epic-3-retrospective: done
 
   # ── Epic 4: Sharing & Export ──
-  epic-4: backlog
-  4-1-share-insight-as-rendered-image: backlog
-  4-2-shareable-read-only-link: backlog
-  4-3-shared-insight-card-view: backlog
-  epic-4-retrospective: optional
+  epic-4: done
+  4-1-share-insight-as-rendered-image: done
+  4-2-shareable-read-only-link: done
+  4-3-shared-insight-card-view: done
+  epic-4-retrospective: done
 
   # ── Epic 5: Subscription & Payments ──
   epic-5: backlog
