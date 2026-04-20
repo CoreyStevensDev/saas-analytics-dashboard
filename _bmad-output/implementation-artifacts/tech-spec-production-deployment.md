@@ -6,9 +6,10 @@ status: 'code-pass-complete-dashboard-pending'
 code_pass_complete_date: '2026-04-19'
 stepsCompleted: [1, 2, 3, 4]
 adversarial_review_date: '2026-04-18'
+adversarial_review_followup_date: '2026-04-19'
 adversarial_findings_total: 20
-adversarial_findings_addressed: 15
-adversarial_findings_deferred: 5
+adversarial_findings_addressed: 17
+adversarial_findings_deferred: 3
 tech_stack:
   - 'Node 22-slim (Docker runtime); Node 20.9+ minimum per project-context'
   - 'pnpm 10.30.2 via corepack; Turborepo 2.8+'
@@ -206,6 +207,13 @@ First 3–5 deploys are manual — provider-specific issues (build minutes, secr
 
 ### Tasks
 
+**Phase 0 — Pre-execution verification (solo-agent, no dashboards needed)**
+
+- [ ] Task 0: Verify adversarial review traceability for F1, F2, F3, F16
+  - File: this spec (grep + optional re-run of `/bmad-review-adversarial-general`)
+  - Action: The "Adversarial Review — Known Gaps" section claims F1, F2, F3, F16 were addressed directly, but none of them have `(F# resolution)` inline references in Technical Decisions, Task Notes, or ACs. Grep the spec for each F-number. For any that don't map to a specific Decision or AC, re-run `/bmad-review-adversarial-general` against the spec to re-surface the original finding, then fold the disposition into the relevant section (Decision, Task, or AC). Record the outcome in the deploy runbook once it's written in Task 22.
+  - Notes: 10–15 minutes. Closes a traceability gap caught during pre-execution review. Do this BEFORE Task 1 (domain purchase) — if any of F1–F3 or F16 turns out to be a region, provider, or architectural decision, you want to know before committing money or DNS.
+
 **Phase 1 — Day 1 async kickoff (queue-bound work, start these first)**
 
 - [ ] Task 1: Purchase production domain at Cloudflare Registrar
@@ -332,8 +340,8 @@ First 3–5 deploys are manual — provider-specific issues (build minutes, secr
 
 - [ ] Task 15: Execute full smoke-test checklist against production
   - File: none (manual verification)
-  - Action: Run every item in smoke-test checklist from "In Scope" section. Document results in `docs/first-production-deploy-log.md` (new file). For each failing check, file an issue or fix + redeploy.
-  - Notes: If Stripe still in test mode (Task 2 not yet approved), skip the "Stripe live webhook" check; all other checks must pass. Re-run the Stripe check on the deploy immediately after Stripe approval.
+  - Action: Run every item in smoke-test checklist from "In Scope" section AND execute every AC from the Acceptance Criteria block. Document results in `docs/first-production-deploy-log.md` (new file). For each failing check, file an issue or fix + redeploy. Include an explicit rate-limiter verification pass per AC 23: issue 20 rapid-fire curls to `https://api.{DOMAIN}/auth/google/start` from a single IP within 60 seconds and assert responses 6 through 20 return HTTP 429 with a `Retry-After` header. The 5/min window is short enough to exercise live without bending config — no separate post-deploy drill needed.
+  - Notes: If Stripe still in test mode (Task 2 not yet approved), skip the "Stripe live webhook" check; all other checks must pass. Re-run the Stripe check on the deploy immediately after Stripe approval. If AC 23 fails (rate limiter not firing), inspect Upstash connectivity and the `trust proxy` hop count (see Task 12a) — these are the two usual suspects.
 
 - [ ] Task 16: Validate observability bridge
   - File: none (local terminal)
@@ -347,15 +355,20 @@ First 3–5 deploys are manual — provider-specific issues (build minutes, secr
   - Action: Push fixes to `main`, trigger manual redeploy on both Railway and Vercel, re-run smoke test subset. Repeat until two consecutive deploys go green without intervention.
   - Notes: Expected friction points: env var typos, Stripe webhook secret sync after switching test→live, OAuth redirect URI typo, DNS cache issues. Budget 2–3 days for this iteration band.
 
+- [ ] Task 17a: Add `/health/version` endpoint exposing deploy SHA
+  - File: `apps/api/src/routes/health.ts` (modify) + `apps/api/src/config.ts` (add optional `GIT_COMMIT_SHA` env var, ≤ 64 chars)
+  - Action: Extend `health.ts` with `GET /health/version` returning `{ sha: env.GIT_COMMIT_SHA ?? 'unknown', node: process.version, uptime: process.uptime() }`. Railway auto-injects `RAILWAY_GIT_COMMIT_SHA` at runtime — either map it to `GIT_COMMIT_SHA` in `config.ts`, or read `RAILWAY_GIT_COMMIT_SHA` directly in `health.ts` with the documented config-bypass exception comment (same pattern as `migrate.ts`). Keep response body small — this endpoint is called by CI, not users. Add matching entry to `apps/web/lib/config.ts` + a Next.js API route at `apps/web/app/api/health/version/route.ts` that reads `process.env.VERCEL_GIT_COMMIT_SHA` if you want SHA coverage on both surfaces (recommended but deferrable if time-boxed to a separate follow-up).
+  - Notes: Closes F19's silent-deploy-failure blind spot. Without this, Task 19's post-deploy curl only proves the API *is running*, not that the *new code* is running. ~20 minutes. No new dependencies.
+
 - [x] Task 18: Add `deploy` job to GitHub Actions
   - File: `.github/workflows/ci.yml`
   - Action: Append new job `deploy` after `docker-smoke`. Trigger: `if: github.ref == 'refs/heads/main' && github.event_name == 'push'`. Steps: (a) trigger Railway deploy via `curl -X POST -H "Authorization: Bearer ${{ secrets.RAILWAY_TOKEN }}" https://backboard.railway.app/graphql/v2 …`, (b) trigger Vercel deploy via `curl -X POST ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}`. Both should be `needs: docker-smoke`. Add repo secrets: `RAILWAY_TOKEN` (from Railway account → Tokens), `VERCEL_DEPLOY_HOOK_URL` (from Vercel project → Settings → Git → Deploy Hooks).
   - Notes: Do NOT block `deploy` on `test-api` (it's `continue-on-error: true` due to memory gap). Add explicit `needs: [docker-smoke]` to avoid accidental main-branch deploys if earlier stages are skipped.
 
-- [ ] Task 19: Validate auto-deploy on merge
-  - File: any trivial change (e.g., add a blank line to README)
-  - Action: Open a PR with a trivial change, merge to main, watch Actions. Confirm `deploy` job runs only after all previous stages pass. Confirm Railway + Vercel both redeploy. Confirm smoke test `/health/ready` still 200 after auto-deploy.
-  - Notes: If deploy fires but one service fails, do NOT rollback automatically. Manual intervention keeps the blast radius small while pipeline is young.
+- [ ] Task 19: Validate auto-deploy on merge + SHA assertion
+  - File: any trivial change (e.g., add a blank line to README) + `.github/workflows/ci.yml` (deploy-job post-verify step)
+  - Action: Open a PR with a trivial change, merge to main, watch Actions. Confirm `deploy` job runs only after all previous stages pass. Confirm Railway + Vercel both redeploy. Append a post-deploy verification step to the `deploy` job: (a) poll `https://api.{DOMAIN}/health/ready` for 200 with a 60s timeout (Railway cold start), (b) curl `https://api.{DOMAIN}/health/version` and assert the returned `sha` equals `${{ github.sha }}`. Fail the job if either fails. This proves the *new code* is running, not just that the API is up.
+  - Notes: The SHA assertion closes F19's silent-deploy-failure blind spot. Without it, a broken Railway build still shows a green check in GHA because the trigger succeeded — users discover the "deploy" didn't actually ship when the new feature is missing. If deploy fires but one service fails, do NOT rollback automatically. Manual intervention keeps the blast radius small while pipeline is young.
 
 **Phase 8 — Documentation**
 
@@ -476,13 +489,16 @@ This spec is primarily configuration and infrastructure — no new code paths ge
 
 ### Adversarial Review — Known Gaps (deferred, tracked)
 
-The 2026-04-18 Adversarial Review surfaced 20 findings. 14 were addressed directly in this spec (F1, F2, F3, F4, F5, F6, F7, F8, F9, F10, F13, F14, F15, F16, F17). The following 6 are deferred with explicit disposition:
+The 2026-04-18 Adversarial Review surfaced 20 findings. 16 were addressed directly in this spec (F1, F2, F3, F5, F6, F7, F8, F9, F10, F13, F14, F15, F16, F17 in the original pass + F12, F19 in the 2026-04-19 follow-up). F20 was resolved via Decision #2 revision (api subdomain now required, not optional). The following 3 are deferred with explicit disposition (F4 is dual-listed — addressed via documentation, deferred as an accepted limitation on rotation UX):
 
-- **F11 — AC 9 writes real Google users to prod DB during smoke test**. Disposition: accepted. Smoke-test users are real accounts that can log in; this is the happy path, not a bug. If it becomes noise, tag smoke-test users via an `is_smoke_test` column in a follow-up and filter out of analytics. Do NOT add a cleanup script — deleting real logged-in users is worse than leaving them.
-- **F12 — Rate limiter firing in production is now covered by new AC 23**. Partially addressed. If AC 23 cannot be executed in the smoke pass (e.g., because the rate-limit windows are longer than the test session tolerates), log the gap and execute a separate rate-limit drill post-deploy.
-- **F18 — No Playwright E2E against real prod URL**. Disposition: deferred. Adding prod-URL E2E to CI would require cross-network Playwright execution and fresh test accounts per run. Docker-compose E2E catches > 90% of what prod E2E would catch. Revisit when quarterly incident pattern shows prod-specific breakage.
-- **F19 — Task 18 Railway GraphQL deploy trigger is fire-and-forget**. Disposition: accepted for Day 1. The GHA job's "success" means "deploy triggered successfully," not "deploy succeeded." Phase 7 includes manual smoke verification, which is the real gate. Upgrade to polling post-launch if stability warrants it.
-- **F20 — `api` subdomain ambiguity** — **RESOLVED** by Decision #2 revision (api subdomain now required, not optional). Moving from deferred to resolved.
 - **F4 — JWT rotation limitation** — single-key rotation forces re-login. Documented in Task 8 notes and deploy runbook as an accepted limitation. Grace-period rotation is a future enhancement tracked outside this spec.
+- **F11 — AC 9 writes real Google users to prod DB during smoke test**. Disposition: accepted. Smoke-test users are real accounts that can log in; this is the happy path, not a bug. If it becomes noise, tag smoke-test users via an `is_smoke_test` column in a follow-up and filter out of analytics. Do NOT add a cleanup script — deleting real logged-in users is worse than leaving them.
+- **F18 — No Playwright E2E against real prod URL**. Disposition: deferred. Adding prod-URL E2E to CI would require cross-network Playwright execution and fresh test accounts per run. Docker-compose E2E catches > 90% of what prod E2E would catch. Revisit when quarterly incident pattern shows prod-specific breakage.
+
+**Previously deferred, now resolved** (2026-04-19 follow-up):
+
+- **F12 — Rate limiter firing in production**. Resolved via Task 15 smoke action + AC 23. The explicit 20-request drill against `/auth/google/start` exercises the 5/min window inside the smoke session; no separate post-deploy drill needed.
+- **F19 — GitHub Actions deploy trigger fire-and-forget**. Resolved via Task 17a (`/health/version` endpoint) + Task 19 SHA assertion. The post-deploy step now curls `/health/version` and compares `sha` to `${{ github.sha }}`, catching the "trigger succeeded but build failed" blind spot.
+- **F20 — `api` subdomain ambiguity**. Resolved via Decision #2 revision (api subdomain required).
 
 **Pattern**: Each deferred finding has an explicit disposition. No finding is "we'll get to it" without a concrete trigger or a stated accept-the-tradeoff rationale. This is the difference between a living backlog and a silent technical debt accumulator.
