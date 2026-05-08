@@ -101,12 +101,11 @@ export const analyticsEvents = pgTable(
   'analytics_events',
   {
     id: integer().primaryKey().generatedAlwaysAsIdentity(),
-    orgId: integer('org_id')
-      .notNull()
-      .references(() => orgs.id, { onDelete: 'cascade' }),
-    userId: integer('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
+    // Nullable since Story 9.4: system-emitted webhook events (Resend bounce/
+    // complaint) have no recoverable user/org context. RLS filter still excludes
+    // NULL-org rows from tenant reads; admin-only via dbAdmin.
+    orgId: integer('org_id').references(() => orgs.id, { onDelete: 'cascade' }),
+    userId: integer('user_id').references(() => users.id, { onDelete: 'cascade' }),
     eventName: varchar('event_name', { length: 100 }).notNull(),
     metadata: jsonb('metadata'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),

@@ -59,7 +59,7 @@ describe('analyticsEvents queries', () => {
       const fakeEvents = [
         {
           id: 1, eventName: 'user.signed_in', orgName: 'Acme', userEmail: 'a@b.com',
-          userName: 'Alice', metadata: null, createdAt: new Date('2026-03-01'),
+          metadata: null, createdAt: new Date('2026-03-01'),
         },
       ];
       mockOffset.mockResolvedValueOnce(fakeEvents);
@@ -70,7 +70,28 @@ describe('analyticsEvents queries', () => {
       expect(result).toEqual(fakeEvents);
       expect(mockSelect).toHaveBeenCalled();
       expect(mockFrom).toHaveBeenCalled();
-      expect(mockInnerJoin).toHaveBeenCalledTimes(2);
+      expect(mockLeftJoin).toHaveBeenCalledTimes(2);
+      expect(mockInnerJoin).not.toHaveBeenCalled();
+    });
+
+    it('surfaces system-emitted rows with NULL org/user context', async () => {
+      const systemRows = [
+        {
+          id: 99,
+          eventName: 'email.bounced',
+          orgName: null,
+          userEmail: null,
+          metadata: { messageId: 'msg-x', recipientEmail: 'co***@example.com' },
+          createdAt: new Date('2026-05-07'),
+        },
+      ];
+      mockOffset.mockResolvedValueOnce(systemRows);
+
+      const { getAllAnalyticsEvents } = await import('./analyticsEvents.js');
+      const result = await getAllAnalyticsEvents({});
+
+      expect(result).toEqual(systemRows);
+      expect(mockLeftJoin).toHaveBeenCalledTimes(2);
     });
 
     it('applies eventName filter', async () => {

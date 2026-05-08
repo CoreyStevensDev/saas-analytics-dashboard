@@ -214,8 +214,8 @@ export function AnalyticsEventsTable() {
               events.map((ev) => (
                 <TableRow key={ev.id}>
                   <TableCell>{eventBadge(ev.eventName)}</TableCell>
-                  <TableCell className="font-medium">{ev.orgName}</TableCell>
-                  <TableCell className="text-muted-foreground">{ev.userEmail}</TableCell>
+                  <TableCell className="font-medium">{ev.orgName ?? 'system'}</TableCell>
+                  <TableCell className="text-muted-foreground">{ev.userEmail ?? '<system>'}</TableCell>
                   <TableCell className="text-muted-foreground" style={{ fontFeatureSettings: '"tnum"' }}>
                     {dateTimeFmt.format(new Date(ev.createdAt))}
                   </TableCell>

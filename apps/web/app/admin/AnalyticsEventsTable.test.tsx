@@ -20,11 +20,11 @@ import { AnalyticsEventsTable } from './AnalyticsEventsTable';
 const fakeEvents = [
   {
     id: 1, eventName: 'user.signed_in', orgName: 'Acme Corp', userEmail: 'alice@acme.com',
-    userName: 'Alice', metadata: null, createdAt: '2026-03-30T12:00:00.000Z',
+    metadata: null, createdAt: '2026-03-30T12:00:00.000Z',
   },
   {
     id: 2, eventName: 'dataset.uploaded', orgName: 'Startup Inc', userEmail: 'bob@startup.com',
-    userName: 'Bob', metadata: { rows: 500, filename: 'q1.csv' }, createdAt: '2026-03-29T08:30:00.000Z',
+    metadata: { rows: 500, filename: 'q1.csv' }, createdAt: '2026-03-29T08:30:00.000Z',
   },
 ];
 

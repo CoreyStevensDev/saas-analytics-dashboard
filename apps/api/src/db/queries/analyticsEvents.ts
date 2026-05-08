@@ -4,8 +4,8 @@ import { analyticsEvents, orgs, users } from '../schema.js';
 import { ANALYTICS_EVENTS, type AnalyticsEventName } from 'shared/constants';
 
 export async function recordEvent(
-  orgId: number,
-  userId: number,
+  orgId: number | null,
+  userId: number | null,
   eventName: AnalyticsEventName,
   metadata?: Record<string, unknown>,
   client: typeof db | DbTransaction = db,
@@ -70,13 +70,14 @@ export async function getAllAnalyticsEvents(opts: AdminEventsFilter) {
       eventName: analyticsEvents.eventName,
       orgName: orgs.name,
       userEmail: users.email,
-      userName: users.name,
       metadata: analyticsEvents.metadata,
       createdAt: analyticsEvents.createdAt,
     })
     .from(analyticsEvents)
-    .innerJoin(orgs, eq(orgs.id, analyticsEvents.orgId))
-    .innerJoin(users, eq(users.id, analyticsEvents.userId))
+    // leftJoin: system-emitted rows have NULL org_id/user_id (Story 9.4) and
+    // would silently drop from the admin feed if these were inner joins.
+    .leftJoin(orgs, eq(orgs.id, analyticsEvents.orgId))
+    .leftJoin(users, eq(users.id, analyticsEvents.userId))
     .where(where)
     .orderBy(desc(analyticsEvents.createdAt))
     .limit(limit)

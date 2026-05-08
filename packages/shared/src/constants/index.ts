@@ -88,6 +88,8 @@ export const ANALYTICS_EVENTS = {
   DIGEST_FAILED: 'digest.failed',
   DIGEST_SKIPPED: 'digest.skipped',
   DIGEST_PREFERENCE_CHANGED: 'digest.preference_changed',
+  EMAIL_BOUNCED: 'email.bounced',
+  EMAIL_COMPLAINED: 'email.complained',
   FINANCIALS_UPDATED: 'financials.updated',
   FORECAST_REQUESTED: 'forecast.requested',
   RUNWAY_ENABLED: 'runway.enabled',

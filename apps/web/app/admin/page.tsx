@@ -7,7 +7,8 @@ import { AdminOrgTable } from './AdminOrgTable';
 import { AdminUserTable } from './AdminUserTable';
 import { SystemHealthPanel } from './SystemHealthPanel';
 import { AiUsageTile } from './AiUsageTile';
-import type { AdminOrgRow, AdminUserRow, AdminStats } from './types';
+import { EmailCompliancePanel } from './EmailCompliancePanel';
+import type { AdminOrgRow, AdminUserRow, AdminStats, EmailComplianceMetrics } from './types';
 
 const EMPTY_STATS: AdminStats = {
   totalOrgs: 0,
@@ -26,15 +27,25 @@ async function fetchAdminUsers(cookieHeader: string) {
   return res.data;
 }
 
+async function fetchEmailCompliance(cookieHeader: string): Promise<EmailComplianceMetrics | null> {
+  try {
+    const res = await apiServer<EmailComplianceMetrics>('/admin/email-compliance', { cookies: cookieHeader });
+    return res.data;
+  } catch {
+    return null;
+  }
+}
+
 export default async function AdminPage() {
   const cookieStore = await cookies();
   const cookieHeader = cookieStore.get(AUTH.COOKIE_NAMES.ACCESS_TOKEN)
     ? cookieStore.toString()
     : '';
 
-  const [{ orgs, stats }, users] = await Promise.all([
+  const [{ orgs, stats }, users, emailCompliance] = await Promise.all([
     fetchAdminOrgs(cookieHeader),
     fetchAdminUsers(cookieHeader),
+    fetchEmailCompliance(cookieHeader),
   ]);
 
   return (
@@ -82,6 +93,8 @@ export default async function AdminPage() {
       </div>
 
       <SystemHealthPanel />
+
+      <EmailCompliancePanel metrics={emailCompliance} />
 
       <div className="space-y-6">
         <AdminOrgTable orgs={orgs} />

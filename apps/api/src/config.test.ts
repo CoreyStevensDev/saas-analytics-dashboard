@@ -72,7 +72,19 @@ describe('envSchema, email provider coupling', () => {
     expect(issue?.message).toMatch(/not permitted in production/);
   });
 
-  it('accepts EMAIL_PROVIDER=resend in production with key set', () => {
+  it('accepts EMAIL_PROVIDER=resend in production with key + webhook secret set', () => {
+    const result = envSchema.safeParse(
+      baseEnv({
+        NODE_ENV: 'production',
+        EMAIL_PROVIDER: 'resend',
+        RESEND_API_KEY: 're_prod',
+        RESEND_WEBHOOK_SECRET: 'whsec_prod',
+      }),
+    );
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects EMAIL_PROVIDER=resend in production without RESEND_WEBHOOK_SECRET', () => {
     const result = envSchema.safeParse(
       baseEnv({
         NODE_ENV: 'production',
@@ -80,7 +92,11 @@ describe('envSchema, email provider coupling', () => {
         RESEND_API_KEY: 're_prod',
       }),
     );
-    expect(result.success).toBe(true);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const issue = result.error.issues.find((i) => i.path[0] === 'RESEND_WEBHOOK_SECRET');
+      expect(issue?.message).toMatch(/RESEND_WEBHOOK_SECRET required/);
+    }
   });
 
   it('defaults EMAIL_PROVIDER to "console" outside production', () => {

@@ -8,6 +8,21 @@ export interface AdminOrgRow {
   createdAt: string;
 }
 
+export interface ComplianceWindowCounts {
+  unsubscribed: number;
+  bounced: number;
+  complained: number;
+  digestsSent: number;
+}
+
+export interface EmailComplianceMetrics {
+  totalProUsers: number;
+  cadenceActiveUsers: number;
+  d7: ComplianceWindowCounts;
+  d30: ComplianceWindowCounts;
+  computedAt: string;
+}
+
 export interface AdminUserRow {
   id: number;
   email: string;
@@ -34,9 +49,11 @@ export interface AiUsageStats {
 export interface AnalyticsEventRow {
   id: number;
   eventName: string;
-  orgName: string;
-  userEmail: string;
-  userName: string;
+  // Nullable since Story 9.4: system-emitted webhook events (Resend bounce/
+  // complaint) carry no user/org context; the admin events feed renders these
+  // with placeholders ("system" / "<system>").
+  orgName: string | null;
+  userEmail: string | null;
   metadata: Record<string, unknown> | null;
   createdAt: string;
 }

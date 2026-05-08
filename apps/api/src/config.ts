@@ -23,6 +23,10 @@ export const envSchema = z
     SENTRY_DSN: z.string().url().optional(),
 
     RESEND_API_KEY: z.string().min(1).optional(),
+    // Svix-shared secret for Resend webhook signature verification. Required
+    // when EMAIL_PROVIDER=resend; the route registers unconditionally and
+    // rejects every request when the secret is absent (no signature can verify).
+    RESEND_WEBHOOK_SECRET: z.string().min(1).optional(),
 
     // Email service (Story 9.1), provider abstraction, console default outside production.
     EMAIL_PROVIDER: z.enum(['resend', 'console', 'postmark']).default('console'),
@@ -58,6 +62,11 @@ export const envSchema = z
   .refine((data) => !(data.EMAIL_PROVIDER === 'resend' && !data.RESEND_API_KEY), {
     message: 'RESEND_API_KEY required when EMAIL_PROVIDER=resend.',
     path: ['EMAIL_PROVIDER'],
+  })
+  .refine((data) => !(data.EMAIL_PROVIDER === 'resend' && data.NODE_ENV === 'production' && !data.RESEND_WEBHOOK_SECRET), {
+    message:
+      'RESEND_WEBHOOK_SECRET required when EMAIL_PROVIDER=resend in production. Without it, bounce + complaint webhooks reject every request and the deliverability feedback loop is dark.',
+    path: ['RESEND_WEBHOOK_SECRET'],
   })
   .refine((data) => !(data.NODE_ENV === 'production' && data.EMAIL_PROVIDER === 'console'), {
     message:

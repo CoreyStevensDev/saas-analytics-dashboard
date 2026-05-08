@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
-import { getOrgsWithStats, getUsers, getOrgDetail, getSystemHealth } from '../services/admin/index.js';
+import { getOrgsWithStats, getUsers, getOrgDetail, getSystemHealth, getEmailComplianceMetrics } from '../services/admin/index.js';
 import { getAllAnalyticsEvents, getAnalyticsEventsTotal, deleteOlderThan } from '../db/queries/analyticsEvents.js';
 import { deleteExpired as deleteExpiredShares } from '../db/queries/shares.js';
 import { auditLogsQueries } from '../db/queries/index.js';
@@ -46,6 +46,11 @@ adminRouter.get('/orgs/:orgId', async (req, res: Response) => {
 adminRouter.get('/health', async (_req, res: Response) => {
   const health = await getSystemHealth();
   res.json({ data: health });
+});
+
+adminRouter.get('/email-compliance', async (_req, res: Response) => {
+  const metrics = await getEmailComplianceMetrics();
+  res.json({ data: metrics });
 });
 
 adminRouter.get('/analytics-events', async (req: Request, res: Response) => {

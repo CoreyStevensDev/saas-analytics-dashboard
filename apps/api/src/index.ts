@@ -17,6 +17,7 @@ import { publicDigestUnsubscribeRouter } from './routes/digestUnsubscribe.js';
 import protectedRouter from './routes/protected.js';
 import dashboardRouter from './routes/dashboard.js';
 import { stripeWebhookRouter } from './routes/stripeWebhook.js';
+import { resendWebhookRouter } from './routes/resendWebhook.js';
 import { integrationsCallbackRouter } from './routes/integrations.js';
 import { initSyncWorker, shutdownWorker } from './services/integrations/worker.js';
 import { initScheduler } from './services/integrations/scheduler.js';
@@ -75,6 +76,7 @@ app.use(helmet({
 }));
 app.use(correlationId);
 app.use(stripeWebhookRouter);
+app.use(resendWebhookRouter);
 app.use(express.json({ limit: '10mb' }));
 app.use(cookieParser());
 app.use(
