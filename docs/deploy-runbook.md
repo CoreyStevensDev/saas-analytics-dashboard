@@ -170,6 +170,19 @@ Vercel and Railway **must** share the exact same value. Drift between the two br
 
 Never roll the webhook secret without also updating Railway in the same window, signature verification fails silently until the env var catches up.
 
+### `RESEND_API_KEY` + `RESEND_WEBHOOK_SECRET`
+
+**Impact**: digest sends pause briefly during the API key swap; bounce/complaint webhooks 400 until the secret update lands. Schedule around the Sunday 18:00 UTC cron tick.
+
+1. Resend dashboard → API Keys → roll the key → copy
+2. Update Railway: `RESEND_API_KEY` = new `re_*`
+3. Resend dashboard → Webhooks → your `/webhooks/resend` endpoint → roll the signing secret
+4. Update Railway: `RESEND_WEBHOOK_SECRET` = new `whsec_*`
+5. Redeploy Railway (single redeploy covers both)
+6. Send yourself a test email via the Resend dashboard, confirm `email.delivered` arrives at `/webhooks/resend` with a 200
+
+Both vars must update in the same window. The webhook route registers unconditionally; if the secret is absent or stale, every Svix-signed request fails verification and the bounce/complaint feedback loop is dark.
+
 ### `CLAUDE_API_KEY`
 
 **Impact**: any in-flight AI summary request fails mid-stream during the key swap window (< 10 seconds).
