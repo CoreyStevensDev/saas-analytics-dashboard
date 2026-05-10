@@ -14,6 +14,7 @@ import { orgFinancialsRouter } from './orgFinancials.js';
 import { roleGuard } from '../middleware/roleGuard.js';
 import { integrationsRouter } from './integrations.js';
 import { preferencesEmailRouter } from './preferencesEmail.js';
+import { digestRouter } from './digest.js';
 
 const protectedRouter = Router();
 
@@ -33,6 +34,7 @@ protectedRouter.use('/org', orgProfileRouter);
 protectedRouter.use('/org', orgFinancialsRouter);
 protectedRouter.use('/integrations', integrationsRouter);
 protectedRouter.use('/preferences/email', preferencesEmailRouter);
+protectedRouter.use('/digest', digestRouter);
 protectedRouter.use('/admin', roleGuard('admin'), adminRouter);
 
 export default protectedRouter;

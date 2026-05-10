@@ -7,6 +7,13 @@ export interface WindowCounts {
   bounced: number;
   complained: number;
   digestsSent: number;
+  // Server-side dedupe via COUNT(DISTINCT (user_id, weekStart)): duplicate
+  // pixel hits or click POSTs collapse to one event per {user, week}. Open
+  // rate is inflated by Apple Mail Privacy Protection (40-60% of consumer
+  // iOS mail), so the panel renders the caveat next to it; CTR is the
+  // cleaner engagement signal.
+  opened: number;
+  clicked: number;
 }
 
 export interface EmailComplianceMetrics {
@@ -44,6 +51,12 @@ export async function getEmailComplianceMetrics(): Promise<EmailComplianceMetric
       (SELECT COUNT(*)::int FROM analytics_events
         WHERE event_name = ${ANALYTICS_EVENTS.DIGEST_SENT}
           AND created_at >= NOW() - INTERVAL '7 days') AS sent_7d,
+      (SELECT COUNT(DISTINCT (user_id, metadata->>'weekStart'))::int FROM analytics_events
+        WHERE event_name = ${ANALYTICS_EVENTS.DIGEST_OPENED}
+          AND created_at >= NOW() - INTERVAL '7 days') AS opened_7d,
+      (SELECT COUNT(DISTINCT (user_id, metadata->>'weekStart'))::int FROM analytics_events
+        WHERE event_name = ${ANALYTICS_EVENTS.DIGEST_CLICKED}
+          AND created_at >= NOW() - INTERVAL '7 days') AS clicked_7d,
 
       (SELECT COUNT(*)::int FROM digest_preferences
         WHERE unsubscribed_at >= NOW() - INTERVAL '30 days') AS unsub_30d,
@@ -55,7 +68,13 @@ export async function getEmailComplianceMetrics(): Promise<EmailComplianceMetric
           AND created_at >= NOW() - INTERVAL '30 days') AS complaint_30d,
       (SELECT COUNT(*)::int FROM analytics_events
         WHERE event_name = ${ANALYTICS_EVENTS.DIGEST_SENT}
-          AND created_at >= NOW() - INTERVAL '30 days') AS sent_30d
+          AND created_at >= NOW() - INTERVAL '30 days') AS sent_30d,
+      (SELECT COUNT(DISTINCT (user_id, metadata->>'weekStart'))::int FROM analytics_events
+        WHERE event_name = ${ANALYTICS_EVENTS.DIGEST_OPENED}
+          AND created_at >= NOW() - INTERVAL '30 days') AS opened_30d,
+      (SELECT COUNT(DISTINCT (user_id, metadata->>'weekStart'))::int FROM analytics_events
+        WHERE event_name = ${ANALYTICS_EVENTS.DIGEST_CLICKED}
+          AND created_at >= NOW() - INTERVAL '30 days') AS clicked_30d
   `);
 
   const row = (result as unknown as { rows?: Record<string, number | string>[] }).rows?.[0]
@@ -72,12 +91,16 @@ export async function getEmailComplianceMetrics(): Promise<EmailComplianceMetric
       bounced: num('bounce_7d'),
       complained: num('complaint_7d'),
       digestsSent: num('sent_7d'),
+      opened: num('opened_7d'),
+      clicked: num('clicked_7d'),
     },
     d30: {
       unsubscribed: num('unsub_30d'),
       bounced: num('bounce_30d'),
       complained: num('complaint_30d'),
       digestsSent: num('sent_30d'),
+      opened: num('opened_30d'),
+      clicked: num('clicked_30d'),
     },
     computedAt: new Date().toISOString(),
   };

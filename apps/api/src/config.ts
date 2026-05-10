@@ -14,6 +14,12 @@ export const envSchema = z
     GOOGLE_CLIENT_SECRET: z.string().min(1),
     JWT_SECRET: z.string().min(32),
     APP_URL: z.string().url(),
+    // Externally-reachable API origin used for URLs that are dereferenced
+    // outside the BFF (e.g., the digest open-pixel hit by recipients' email
+    // clients). Distinct from API_INTERNAL_URL on the web side, which is the
+    // server-side BFF target. Production must NOT keep the localhost default,
+    // a placeholder there would point pixels at the recipient's own machine.
+    PUBLIC_API_URL: z.string().url().default('http://localhost:3001'),
     COOKIE_DOMAIN: z.string().min(1).optional(),
     NODE_ENV: z.enum(['development', 'production', 'test']),
     PORT: z.coerce.number().default(3001),
@@ -93,6 +99,19 @@ export const envSchema = z
       message:
         'EMAIL_MAILING_ADDRESS looks like the spec placeholder ("1234 Main St..."). CAN-SPAM requires a real physical address in every commercial email, set this to your actual mailing address before shipping to production.',
       path: ['EMAIL_MAILING_ADDRESS'],
+    },
+  )
+  // Tracking-pixel URLs (digest open) are baked into outgoing email and
+  // dereferenced by recipients across the public internet. A localhost
+  // PUBLIC_API_URL in production points pixels at the recipient's machine,
+  // silently zeroing the open-rate metric.
+  .refine(
+    (data) =>
+      !(data.NODE_ENV === 'production' && /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)/i.test(data.PUBLIC_API_URL)),
+    {
+      message:
+        'PUBLIC_API_URL must not be localhost in production. Set it to the public API origin (e.g., https://api.example.com); the digest open-pixel URL is dereferenced by recipients\' email clients across the internet.',
+      path: ['PUBLIC_API_URL'],
     },
   );
 

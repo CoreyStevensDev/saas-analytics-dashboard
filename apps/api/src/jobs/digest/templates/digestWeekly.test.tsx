@@ -18,7 +18,15 @@ const {
   buildUnsubscribeUrl,
 } = await import('./digestWeekly.js');
 
-const fixture = {
+const fixture: {
+  orgName: string;
+  bullets: string[];
+  dashboardUrl: string;
+  unsubscribeUrl: string;
+  mailingAddress: string;
+  companyName: string;
+  openTrackingUrl?: string;
+} = {
   orgName: 'Acme Coffee',
   bullets: ['Revenue up 12%', 'Payroll spiked', 'Runway 8 months'],
   dashboardUrl: 'https://app.tellsight.com/dashboard?datasetId=1',
@@ -201,6 +209,48 @@ describe('buildDashboardUrl', () => {
     expect(url).toContain('utm_medium=email');
     expect(url).toContain('utm_campaign=weekly-digest');
     expect(url).toContain('https://app.tellsight.com/dashboard');
+  });
+
+  it('omits t= when no tracking token supplied', () => {
+    const url = buildDashboardUrl(42);
+    expect(url).not.toContain('t=');
+  });
+
+  it('appends t= when tracking token supplied', () => {
+    const url = buildDashboardUrl(42, 'opaque-tracking-token');
+    expect(url).toContain('t=opaque-tracking-token');
+  });
+});
+
+describe('DigestWeekly tracking pixel (AC #4)', () => {
+  it('omits the open-pixel <img> when openTrackingUrl is undefined', async () => {
+    const html = await renderFixture();
+    expect(html).not.toMatch(/track\/digest\/open/);
+    expect(html).not.toMatch(/<img[^>]+width="1"[^>]+height="1"/i);
+  });
+
+  it('renders the 1x1 open-pixel <img> when openTrackingUrl is supplied', async () => {
+    const html = await renderFixture({
+      openTrackingUrl: 'https://api.tellsight.com/track/digest/open?t=abc123',
+    });
+    expect(html).toMatch(/<img[^>]+src="https:\/\/api\.tellsight\.com\/track\/digest\/open\?t=abc123"/);
+    expect(html).toMatch(/width="1"/);
+    expect(html).toMatch(/height="1"/);
+    expect(html).toMatch(/alt=""/);
+  });
+
+  it('places the pixel after the footer content (body-end placement)', async () => {
+    const html = await renderFixture({
+      openTrackingUrl: 'https://api.tellsight.com/track/digest/open?t=abc',
+    });
+    // The pixel-bearing <img> tag appears AFTER the unsubscribe link, the
+    // canonical body-end ordering. react-email may emit other meta references
+    // earlier (e.g., preview text), so anchor the check on the actual <img>
+    // element rather than the URL substring.
+    const unsubLinkPos = html.indexOf('Unsubscribe from these emails');
+    const pixelImgPos = html.search(/<img[^>]+track\/digest\/open/);
+    expect(unsubLinkPos).toBeGreaterThan(0);
+    expect(pixelImgPos).toBeGreaterThan(unsubLinkPos);
   });
 });
 

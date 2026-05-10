@@ -38,6 +38,8 @@ import { DatasetChip } from '@/components/datasets/DatasetChip';
 import { QbReturnToast } from './QbReturnToast';
 import { LockedInsightCard } from './LockedInsightCard';
 import { CashBalanceStaleBanner } from './CashBalanceStaleBanner';
+import { DigestClickTracker } from './DigestClickTracker';
+import { LastDigestIndicator } from '@/components/insights/LastDigestIndicator';
 import type { OrgFinancials } from 'shared/types';
 
 interface DashboardShellProps {
@@ -344,6 +346,9 @@ export function DashboardShell({ initialData, cachedSummary, cachedMetadata, cac
       <Suspense fallback={null}>
         <QbReturnToast />
       </Suspense>
+      <Suspense fallback={null}>
+        <DigestClickTracker />
+      </Suspense>
       {showOnboarding && <OnboardingModal onComplete={() => setShowOnboarding(false)} />}
       <DemoModeBanner demoState={data.demoState} onUploadClick={handleUploadClick} />
 
@@ -507,6 +512,13 @@ export function DashboardShell({ initialData, cachedSummary, cachedMetadata, cac
                 </div>
               </div>
             )}
+            {/* Single mount point, lifted above the mobile/desktop branch so a
+                useIsMobile flip after hydration doesn't double-fire the indicator's
+                fetch. SWR dedupe inside the component handles repeated mounts
+                across navigations. */}
+            <div className="mt-2 px-1">
+              <LastDigestIndicator />
+            </div>
           </AiSummaryErrorBoundary>
         </div>
 

@@ -14,6 +14,7 @@ import authRouter from './routes/auth.js';
 import { publicInviteRouter } from './routes/invites.js';
 import { publicShareRouter } from './routes/sharing.js';
 import { publicDigestUnsubscribeRouter } from './routes/digestUnsubscribe.js';
+import { digestTrackingRouter } from './routes/digestTracking.js';
 import protectedRouter from './routes/protected.js';
 import dashboardRouter from './routes/dashboard.js';
 import { stripeWebhookRouter } from './routes/stripeWebhook.js';
@@ -93,6 +94,13 @@ app.use('/integrations', rateLimitPublic, integrationsCallbackRouter);
 app.use(rateLimitPublic, publicInviteRouter);
 app.use(rateLimitPublic, publicShareRouter);
 app.use(rateLimitPublic, publicDigestUnsubscribeRouter);
+// Tracking endpoints sit OUTSIDE the public rate limiter on purpose. Apple Mail
+// Privacy Protection proxies all pixel fetches through shared Apple IPs; a
+// 60/min/IP cap silently undercounts opens for any cohort routed through one
+// proxy address. The HMAC token is the abuse defense, an unauthenticated hit
+// just returns the 42-byte GIF and emits nothing. Click ingest gets the same
+// posture for symmetry (corporate proxies share IPs the same way).
+app.use(digestTrackingRouter);
 app.use(rateLimitPublic, dashboardRouter);
 app.use(rateLimitPublic, protectedRouter);
 setupExpressErrorHandler(app);

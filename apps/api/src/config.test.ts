@@ -37,6 +37,7 @@ function baseEnv(overrides: Record<string, string> = {}) {
     GOOGLE_CLIENT_SECRET: 'gcs',
     JWT_SECRET: 'j'.repeat(32),
     APP_URL: 'http://localhost:3000',
+    PUBLIC_API_URL: 'https://api.kiln.app',
     NODE_ENV: 'development',
     EMAIL_FROM_ADDRESS: 'insights@kiln.app',
     EMAIL_MAILING_ADDRESS: '500 Real St, Denver, CO 80202',
@@ -160,6 +161,45 @@ describe('envSchema, CAN-SPAM + delivery guards (no placeholder defaults)', () =
     if (result.success) return;
     const issue = result.error.issues.find((i) => i.path[0] === 'EMAIL_MAILING_ADDRESS');
     expect(issue?.message).toMatch(/placeholder/i);
+  });
+
+  it('rejects localhost PUBLIC_API_URL in production', () => {
+    const result = envSchema.safeParse(
+      baseEnv({
+        NODE_ENV: 'production',
+        EMAIL_PROVIDER: 'resend',
+        RESEND_API_KEY: 're_prod',
+        RESEND_WEBHOOK_SECRET: 'whsec_prod',
+        PUBLIC_API_URL: 'http://localhost:3001',
+      }),
+    );
+
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    const issue = result.error.issues.find((i) => i.path[0] === 'PUBLIC_API_URL');
+    expect(issue?.message).toMatch(/localhost/i);
+  });
+
+  it('accepts a real public origin for PUBLIC_API_URL in production', () => {
+    const result = envSchema.safeParse(
+      baseEnv({
+        NODE_ENV: 'production',
+        EMAIL_PROVIDER: 'resend',
+        RESEND_API_KEY: 're_prod',
+        RESEND_WEBHOOK_SECRET: 'whsec_prod',
+        PUBLIC_API_URL: 'https://api.example.app',
+      }),
+    );
+    expect(result.success).toBe(true);
+  });
+
+  it('uses the localhost default for PUBLIC_API_URL outside production when unset', () => {
+    const env = baseEnv();
+    delete (env as Record<string, string>).PUBLIC_API_URL;
+    const result = envSchema.safeParse(env);
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data.PUBLIC_API_URL).toBe('http://localhost:3001');
   });
 
   it('allows @example.* addresses outside production (dev / test / CI)', () => {

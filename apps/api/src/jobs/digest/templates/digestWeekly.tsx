@@ -20,6 +20,11 @@ export interface DigestWeeklyProps {
   unsubscribeUrl: string;
   mailingAddress: string;
   companyName: string;
+  // Open-tracking pixel src; when undefined the <img> is omitted (dev/test
+  // renders without a token still produce valid HTML). Body-end placement is
+  // industry convention, the pixel doesn't block content render in clients
+  // that pre-fetch sequentially.
+  openTrackingUrl?: string;
 }
 
 const colors = {
@@ -102,6 +107,7 @@ export function DigestWeekly({
   unsubscribeUrl,
   mailingAddress,
   companyName,
+  openTrackingUrl,
 }: DigestWeeklyProps) {
   const recipientExplanation = buildRecipientExplanation(orgName);
 
@@ -159,6 +165,15 @@ export function DigestWeekly({
             </tr>
           </tbody>
         </table>
+        {openTrackingUrl && (
+          <img
+            src={openTrackingUrl}
+            alt=""
+            width={1}
+            height={1}
+            style={{ display: 'block', border: 0, width: 1, height: 1 }}
+          />
+        )}
       </body>
     </html>
   );
@@ -181,11 +196,16 @@ export function parseSummaryToBullets(content: string): string[] {
     .slice(0, 5);
 }
 
-export function buildDashboardUrl(datasetId: number): string {
+export function buildDashboardUrl(datasetId: number, trackingToken?: string): string {
   const url = new URL('/dashboard', env.APP_URL);
   url.searchParams.set('datasetId', String(datasetId));
   for (const [key, value] of Object.entries(DIGEST_UTM_PARAMS)) {
     url.searchParams.set(key, value);
+  }
+  // Carrying the token on the CTA URL lets the dashboard's click tracker
+  // recover {userId, orgId, weekStart} on mount, no server lookup needed.
+  if (trackingToken) {
+    url.searchParams.set('t', trackingToken);
   }
   return url.toString();
 }

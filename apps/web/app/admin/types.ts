@@ -13,6 +13,8 @@ export interface ComplianceWindowCounts {
   bounced: number;
   complained: number;
   digestsSent: number;
+  opened: number;
+  clicked: number;
 }
 
 export interface EmailComplianceMetrics {

@@ -1,5 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Mail, MailX, AlertTriangle } from 'lucide-react';
+import { Mail, MailX, AlertTriangle, Eye, MousePointer } from 'lucide-react';
 import type { EmailComplianceMetrics, ComplianceWindowCounts } from './types';
 
 interface Props {
@@ -17,7 +17,7 @@ function ratePct(num: number, denom: number): number | null {
 }
 
 function formatRate(rate: number | null, num: number, denom: number): string {
-  if (rate === null) return `\u2014 (${numFmt.format(num)} of 0)`;
+  if (rate === null) return `n/a (${numFmt.format(num)} of 0)`;
   return `${(rate * 100).toFixed(2)}% (${numFmt.format(num)} of ${numFmt.format(denom)})`;
 }
 
@@ -31,10 +31,12 @@ function WindowRow({ label, counts, cadenceActiveUsers }: WindowRowProps) {
   const unsubRate = ratePct(counts.unsubscribed, cadenceActiveUsers);
   const bounceRate = ratePct(counts.bounced, counts.digestsSent);
   const complaintRate = ratePct(counts.complained, counts.digestsSent);
+  const openRate = ratePct(counts.opened, counts.digestsSent);
+  const clickRate = ratePct(counts.clicked, counts.digestsSent);
   const complaintHigh = complaintRate !== null && complaintRate > COMPLAINT_CEILING;
 
   return (
-    <div className="grid gap-4 md:grid-cols-3">
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-sm font-medium">Unsubscribes ({label})</CardTitle>
@@ -73,6 +75,30 @@ function WindowRow({ label, counts, cadenceActiveUsers }: WindowRowProps) {
           )}
         </CardContent>
       </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-sm font-medium">Opens ({label})</CardTitle>
+          <Eye className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+        </CardHeader>
+        <CardContent>
+          <div className="text-xl font-bold" style={{ fontFeatureSettings: '"tnum"' }}>
+            {formatRate(openRate, counts.opened, counts.digestsSent)}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-sm font-medium">Clicks ({label})</CardTitle>
+          <MousePointer className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+        </CardHeader>
+        <CardContent>
+          <div className="text-xl font-bold" style={{ fontFeatureSettings: '"tnum"' }}>
+            {formatRate(clickRate, counts.clicked, counts.digestsSent)}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -105,6 +131,11 @@ export function EmailCompliancePanel({ metrics }: Props) {
           {numFmt.format(totalProUsers)} Pro users, {numFmt.format(cadenceActiveUsers)} digest-active
         </p>
       </div>
+
+      <p className="text-xs text-muted-foreground" data-testid="mpp-caveat">
+        Open rate is inflated by Apple Mail Privacy Protection (estimated 40-60% of consumer iOS Mail
+        opens). Click-through rate (CTR) is the cleaner engagement signal.
+      </p>
 
       <div className="space-y-3">
         <Card className="bg-muted/30">

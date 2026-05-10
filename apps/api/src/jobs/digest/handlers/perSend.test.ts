@@ -25,11 +25,21 @@ vi.mock('../../../config.js', () => ({
   env: {
     REDIS_URL: 'redis://localhost:6379',
     APP_URL: 'https://app.tellsight.com',
+    PUBLIC_API_URL: 'https://api.tellsight.com',
     JWT_SECRET: 'a'.repeat(64),
     EMAIL_MAILING_ADDRESS: '1 Real St, Anywhere',
     EMAIL_FROM_ADDRESS: 'digest@tellsight.test',
     EMAIL_FROM_NAME: 'Tellsight',
   },
+}));
+
+const mockSetTag = vi.fn();
+const mockWithScope = vi.fn(async (cb: (scope: { setTag: typeof mockSetTag }) => unknown) =>
+  cb({ setTag: mockSetTag }),
+);
+
+vi.mock('../../../lib/sentry.js', () => ({
+  Sentry: { withScope: mockWithScope },
 }));
 
 vi.mock('../../../lib/logger.js', () => ({
@@ -58,6 +68,20 @@ vi.mock('../../../services/email/index.js', () => ({
 vi.mock('../../../services/analytics/trackEvent.js', () => ({
   trackEvent: mockTrackEvent,
 }));
+
+// Capture DigestWeekly props directly. The component's return is a React tree
+// whose root is <html>, props don't surface on the rendered element. Mocking
+// the module lets the test assert what was passed in without parsing HTML.
+const mockDigestWeekly = vi.fn((_props: unknown) => ({ __renderedDigest: true }));
+vi.mock('../templates/digestWeekly.js', async () => {
+  const actual = await vi.importActual<typeof import('../templates/digestWeekly.js')>(
+    '../templates/digestWeekly.js',
+  );
+  return {
+    ...actual,
+    DigestWeekly: (props: unknown) => mockDigestWeekly(props),
+  };
+});
 
 const { handlePerSendJob } = await import('./perSend.js');
 
@@ -141,6 +165,52 @@ describe('happy path', () => {
     );
     expect(opts.headers!['List-Unsubscribe']).not.toContain('mailto:');
     expect(opts.headers!['List-Unsubscribe-Post']).toBe('List-Unsubscribe=One-Click');
+  });
+
+  it('wraps the per-send body in Sentry.withScope with org/user/template/week tags', async () => {
+    mockUpsertDefaults.mockResolvedValueOnce({ userId: 7, cadence: 'weekly', lastSentAt: null });
+    mockGetById.mockResolvedValueOnce(okSummary);
+    mockSendEmail.mockResolvedValueOnce({
+      status: 'sent',
+      providerMessageId: 'msg-scope',
+      durationMs: 10,
+    });
+
+    await handlePerSendJob({ id: 'send-scope', data: baseJobData } as never);
+
+    expect(mockWithScope).toHaveBeenCalledTimes(1);
+    expect(mockSetTag).toHaveBeenCalledWith('org_id', '42');
+    expect(mockSetTag).toHaveBeenCalledWith('user_id', '7');
+    expect(mockSetTag).toHaveBeenCalledWith('template_version', 'digest-weekly-v1');
+    expect(mockSetTag).toHaveBeenCalledWith('week_start', '2026-05-03T00:00:00.000Z');
+  });
+
+  it('signs a tracking token and threads it through the open URL + dashboard CTA', async () => {
+    mockUpsertDefaults.mockResolvedValueOnce({ userId: 7, cadence: 'weekly', lastSentAt: null });
+    mockGetById.mockResolvedValueOnce(okSummary);
+    mockSendEmail.mockResolvedValueOnce({
+      status: 'sent',
+      providerMessageId: 'msg-token',
+      durationMs: 10,
+    });
+
+    await handlePerSendJob({ id: 'send-token', data: baseJobData } as never);
+
+    expect(mockDigestWeekly).toHaveBeenCalledTimes(1);
+    const props = mockDigestWeekly.mock.calls[0]![0] as {
+      openTrackingUrl: string;
+      dashboardUrl: string;
+    };
+
+    expect(props.openTrackingUrl).toMatch(/^https:\/\/api\.tellsight\.com\/track\/digest\/open\?t=.+/);
+    expect(props.dashboardUrl).toContain('utm_source=digest');
+    expect(props.dashboardUrl).toMatch(/[?&]t=[^&]+/);
+
+    // Same token in both places, recoverable on click and on open
+    const tokenFromOpen = new URL(props.openTrackingUrl).searchParams.get('t');
+    const tokenFromCta = new URL(props.dashboardUrl).searchParams.get('t');
+    expect(tokenFromOpen).toBeTruthy();
+    expect(tokenFromOpen).toBe(tokenFromCta);
   });
 
   it('logs canSpamElements with all four CAN-SPAM fields on success', async () => {

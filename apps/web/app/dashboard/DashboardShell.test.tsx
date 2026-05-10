@@ -32,6 +32,7 @@ vi.mock('swr', () => ({
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: mockPush, replace: mockReplace }),
   useSearchParams: () => mockSearchParams,
+  usePathname: () => '/dashboard',
 }));
 
 vi.mock('@/lib/api-client', () => ({

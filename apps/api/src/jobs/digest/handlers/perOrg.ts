@@ -44,7 +44,7 @@ export async function handlePerOrgJob(job: Job): Promise<void> {
   const datasetId = await orgsQueries.getActiveDatasetId(orgId);
   if (datasetId === null) {
     logger.warn(
-      { correlationId, orgId, jobId: job.id },
+      { correlationId, orgId, jobId: job.id, outcome: 'skipped', durationMs: Date.now() - start },
       'Per-org digest skipped: org has no active dataset (lost between orchestrator + processing)',
     );
     return;
@@ -53,7 +53,7 @@ export async function handlePerOrgJob(job: Job): Promise<void> {
   const org = await orgsQueries.findOrgById(orgId);
   if (!org) {
     logger.warn(
-      { correlationId, orgId, jobId: job.id },
+      { correlationId, orgId, jobId: job.id, outcome: 'skipped', durationMs: Date.now() - start },
       'Per-org digest skipped: org row missing (deleted between orchestrator + processing)',
     );
     return;
@@ -143,7 +143,7 @@ export async function handlePerOrgJob(job: Job): Promise<void> {
     } catch (err) {
       enqueueFailures++;
       logger.error(
-        { correlationId, orgId, userId: r.userId, err },
+        { correlationId, orgId, userId: r.userId, outcome: 'enqueue_failure', err },
         'Failed to enqueue digest-send job, continuing',
       );
     }
@@ -161,6 +161,7 @@ export async function handlePerOrgJob(job: Job): Promise<void> {
       enqueueFailures,
       weekStart,
       weekEnd,
+      outcome: 'sent',
       durationMs: Date.now() - start,
     },
     'Per-org digest complete',
